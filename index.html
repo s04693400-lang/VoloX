@@ -1,23 +1,119 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#fff"><title>VoloX — Search</title><link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>VoloX ⚡ | Search the web</title>
+  <meta name="theme-color" content="#ffffff">
+
+  <link rel="stylesheet" href="style.css">
 </head>
-<body data-page="home">
-<header class="home-header">
-  <button class="icon-button" id="menuButton" aria-label="Menu">☰</button>
-  <a class="wordmark small-wordmark" href="index.html"><span>V</span><span>o</span><span>l</span><span>o</span><span>X</span></a>
-</header>
-<aside class="drawer" id="drawer" aria-hidden="true"><div class="drawer-head"><b>VoloX</b><button class="icon-button" id="closeMenu">×</button></div>
-<a href="history.html">🕘 Search history</a><a href="history.html#images">🖼️ Image history</a><a href="history.html#chats">🤖 AI chat history</a>
-<div class="drawer-line"></div><a href="ai.html">🤖 VoloX AI</a><a href="images.html">🖼️ Images</a><a href="create.html">🎨 Image creation</a><a href="lens.html">📷 VoloX Lens</a>
-</aside><div class="scrim" id="scrim"></div>
-<main class="home-main">
-<section class="hero"><a class="wordmark hero-wordmark" href="index.html"><span>V</span><span>o</span><span>l</span><span>o</span><span>X</span></a><p class="tagline">Explore the web. Discover more.</p>
-<form class="search-form" id="searchForm"><span class="search-symbol">⌕</span><input id="searchInput" type="search" placeholder="Search anything..." autocomplete="off"><button class="search-submit" aria-label="Search">⌕</button></form>
-<div class="tool-shortcuts"><a class="tool-chip" href="ai.html">🤖 <span>AI Chat</span></a><a class="tool-chip" href="images.html">🖼️ <span>Images</span></a><a class="tool-chip" href="create.html">🎨 <span>Create</span></a><a class="tool-chip" href="lens.html">📷 <span>Lens</span></a></div>
-</section>
-<section class="discover-section" id="discover"><div class="section-heading"><div><p class="eyebrow">WHAT'S HAPPENING</p><h2>VoloX Discover</h2><p class="muted">Fresh stories from around the web</p></div><button class="text-button" id="refreshDiscover">↻ Refresh</button></div><div id="discoverGrid" class="discover-grid"><div class="loading-card">Loading stories…</div></div></section>
-</main><footer><span class="footer-logo">VoloX</span><span>Search · AI · Discover</span></footer><script src="app.js"></script>
-</body></html>
+
+<body>
+
+  <header class="topbar">
+    <button class="menu-btn" id="menuBtn" type="button">☰</button>
+
+    <a class="logo" href="index.html">
+      <span>V</span><span>o</span><span>l</span><span>o</span><span>X</span>
+    </a>
+  </header>
+
+  <main>
+
+    <section class="hero">
+      <h1>VoloX</h1>
+      <p>Explore the web. Discover more.</p>
+
+      <form id="searchForm" class="search-box">
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Search anything..."
+          autocomplete="off"
+        >
+        <button type="submit">SEARCH</button>
+      </form>
+
+      <div class="quick-buttons">
+        <button type="button" onclick="imageSearch()">🖼️ Images</button>
+        <button type="button" onclick="aiSearch()">🤖 VoloX AI</button>
+        <button type="button" onclick="openNewTab('create.html')">✨ Create</button>
+        <button type="button" onclick="openNewTab('lens.html')">📷 Lens</button>
+      </div>
+    </section>
+
+    <!-- CRICKET / SPORTS HORIZONTAL STRIP -->
+    <section class="cricket-strip" aria-label="Latest sports updates">
+      <div class="section-mini-title">🏏 Latest sports</div>
+
+      <div class="cricket-track-wrap" id="cricketTicker">
+        <div class="cricket-track" id="cricketTrack">
+          <div class="cricket-placeholder">
+            Loading latest sports updates…
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEARCH RESULTS -->
+    <section id="results" class="results"></section>
+
+    <!-- DISCOVER -->
+    <section class="discover-section" id="discover">
+
+      <div class="discover-header">
+        <div>
+          <h2>VoloX Discover</h2>
+          <p>Fresh stories, news and updates from around the web.</p>
+          <span id="discoverUpdated">Updating...</span>
+        </div>
+
+        <button id="refreshDiscover" class="refresh-btn" type="button">
+          ↻ Refresh
+        </button>
+      </div>
+
+      <div class="discover-grid" id="discoverGrid">
+        <div class="discover-loading">
+          Loading fresh stories…
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- SIDE MENU -->
+  <aside id="sideMenu" class="side-menu">
+
+    <div class="menu-header">
+      <strong>VoloX</strong>
+      <button id="closeMenu" type="button">×</button>
+    </div>
+
+    <a href="index.html">🔎 Search</a>
+    <a href="history.html#search-history">🕘 Search history</a>
+    <a href="history.html#image-history">🖼️ Image history</a>
+    <a href="history.html#ai-history">🤖 AI chat history</a>
+
+    <hr>
+
+    <a href="images.html" target="_blank">🖼️ VoloX Images</a>
+    <a href="create.html" target="_blank">✨ Image Creation</a>
+    <a href="lens.html" target="_blank">📷 VoloX Lens</a>
+    <a href="ai.html" target="_blank">🤖 VoloX AI</a>
+
+  </aside>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <footer>
+    VOLOX ⚡ · EXPLORE WITHOUT LIMITS
+  </footer>
+
+  <script src="app.js"></script>
+
+</body>
+</html>
