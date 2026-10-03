@@ -1,66 +1,816 @@
-const WORKER_URL = "https://blackfox.s04693400.workers.dev";
-const page = document.body.dataset.page;
+ const WORKER_URL = "https://blackfox.s04693400.workers.dev";
 
-function esc(v=""){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
-function saveHistory(key,value){try{const a=JSON.parse(localStorage.getItem(key)||"[]");a.unshift(value);localStorage.setItem(key,JSON.stringify(a.slice(0,50)))}catch{}}
-function openSearch(q){q=q.trim();if(!q)return;saveHistory("volox_search_history",q);window.open(`results.html?q=${encodeURIComponent(q)}`,"_blank","noopener");}
+let aiMessages = [];
+let searchHistory = JSON.parse(localStorage.getItem("volox_search_history") || "[]");
 
-if(page==="home"){
- const form=document.getElementById("searchForm"), input=document.getElementById("searchInput");
- form.addEventListener("submit",e=>{e.preventDefault();openSearch(input.value)});
- const menu=document.getElementById("menuButton"),drawer=document.getElementById("drawer"),close=document.getElementById("closeMenu"),scrim=document.getElementById("scrim");
- const set=(open)=>{drawer.classList.toggle("open",open);scrim.classList.toggle("open",open);drawer.setAttribute("aria-hidden",String(!open))};
- menu.addEventListener("click",()=>set(true));close.addEventListener("click",()=>set(false));scrim.addEventListener("click",()=>set(false));
- loadDiscover();document.getElementById("refreshDiscover").addEventListener("click",loadDiscover);
-}
+const searchForm = document.getElementById("searchForm");
+const searchInput = document.getElementById("searchInput");
+const results = document.getElementById("results");
 
-async function loadDiscover(){
- const grid=document.getElementById("discoverGrid");if(!grid)return;grid.innerHTML='<div class="loading-card">Loading fresh stories…</div>';
- try{const r=await fetch(`${WORKER_URL}/api/discover`);const d=await r.json();if(!r.ok)throw Error(d.error||"Discover failed");
-  const cats=["cricket","news","technology","robotics"];let stories=[];
-  cats.forEach(cat=>(d[cat]?.results||[]).slice(0,2).forEach((x,i)=>stories.push({category:cat,title:x.title||"Untitled story",content:x.content||x.description||"",url:x.url||"#",image:x.image||d[cat]?.images?.[i]?.url||d[cat]?.images?.[i]||""})));
-  grid.innerHTML=stories.length?stories.slice(0,8).map(s=>`<article class="discover-card">${s.image?`<img src="${esc(s.image)}" alt="" loading="lazy">`:``}<div class="discover-body"><div class="discover-cat">${esc(s.category.toUpperCase())}</div><h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a></h3><p>${esc(s.content).slice(0,145)}${s.content.length>145?"…":""}</p></div></article>`).join(""):'<div class="loading-card">No stories found right now.</div>';
- }catch(e){grid.innerHTML=`<div class="loading-card">Discover could not load. ${esc(e.message)}</div>`}
+if (searchForm) {
+  searchForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    search();
+  });
 }
 
-if(page==="results"){
- const params=new URLSearchParams(location.search), initial=params.get("q")||"", input=document.getElementById("resultsInput");input.value=initial;
- document.getElementById("resultsSearch").addEventListener("submit",e=>{e.preventDefault();if(input.value.trim())location.href=`results.html?q=${encodeURIComponent(input.value.trim())}`});
- if(initial)runSearch(initial);else document.getElementById("searchStatus").textContent="Type a search above.";
-}
-async function runSearch(q){
- const status=document.getElementById("searchStatus"),quick=document.getElementById("quickAnswer"),shop=document.getElementById("shoppingSection"),articles=document.getElementById("articleResults");status.textContent=`Results for “${q}”`;quick.innerHTML="";shop.innerHTML="";articles.innerHTML="<p>Searching the web…</p>";
- try{const r=await fetch(`${WORKER_URL}/api/search?q=${encodeURIComponent(q)}`),d=await r.json();if(!r.ok)throw Error(d.error||"Search failed");
-  if(d.answer)quick.innerHTML=`<div class="quick-answer"><h2>About this search</h2><p>${esc(d.answer)}</p></div>`;
-  if(d.shopping?.items?.length){shop.innerHTML=`<div class="shopping-box"><h2>Products, prices & purchase links</h2><div class="product-grid">${d.shopping.items.map(p=>`<div class="product-card"><h3>${esc(p.title)}</h3><div class="price">${esc(p.price||"Price shown on store")}</div><div class="result-source">${esc(p.store||"")}</div><a class="buy-link" href="${esc(p.url)}" target="_blank" rel="noopener">View / purchase ↗</a></div>`).join("")}</div><p class="tiny-note">Prices and availability can change; the purchase link opens the source store/article.</p></div>`}
-  const rs=d.results||[];articles.innerHTML=rs.length?rs.map(x=>`<article class="result-card"><div class="result-source">${esc(x.url||"")}</div><h3><a href="${esc(x.url||"#")}" target="_blank" rel="noopener">${esc(x.title||"Untitled")}</a></h3><p>${esc(x.content||x.description||"")}</p></article>`).join(""):"<p>No articles found.</p>";
- }catch(e){articles.innerHTML=`<p>Search couldn't load: ${esc(e.message)}</p>`}
+/* -----------------------------
+   HELPERS
+----------------------------- */
+
+function getQuery() {
+  return searchInput ? searchInput.value.trim() : "";
 }
 
-if(page==="ai"){
- let messages=[];const box=document.getElementById("chatMessages"),form=document.getElementById("chatForm"),input=document.getElementById("chatInput");
- form.addEventListener("submit",async e=>{e.preventDefault();const q=input.value.trim();if(!q)return; if(messages.length===0)box.innerHTML="";messages.push({role:"user",text:q});box.insertAdjacentHTML("beforeend",`<div class="message user">${esc(q)}</div>`);input.value="";box.insertAdjacentHTML("beforeend",`<div class="message model" id="thinking">VoloX AI is thinking…</div>`);box.scrollTop=box.scrollHeight;
-  try{const r=await fetch(`${WORKER_URL}/api/ai`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages})});const d=await r.json();document.getElementById("thinking")?.remove();if(!r.ok)throw Error(d.error||d.message||"AI request failed");const text=d.text||d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"Gemini returned no text.";messages.push({role:"model",text});box.insertAdjacentHTML("beforeend",`<div class="message model">${esc(text)}</div>`);saveHistory("volox_chat_history",{question:q,answer:text,time:Date.now()});box.scrollTop=box.scrollHeight}catch(err){document.getElementById("thinking")?.remove();box.insertAdjacentHTML("beforeend",`<div class="message model">${esc(err.message)}</div>`)}
- });
- document.getElementById("newChat").addEventListener("click",()=>{messages=[];box.innerHTML='<div class="chat-empty"><h1>VoloX AI</h1><p>Ask anything. Keep the conversation going.</p></div>';input.focus()});
+function escapeHTML(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-if(page==="images"){
- const form=document.getElementById("imageSearchForm"),input=document.getElementById("imageQuery"),grid=document.getElementById("imageGrid");
- form.addEventListener("submit",async e=>{e.preventDefault();const q=input.value.trim();if(!q)return;saveHistory("volox_image_history",q);grid.innerHTML="<p>Searching images…</p>";try{const r=await fetch(`${WORKER_URL}/api/search?q=${encodeURIComponent(q)}`),d=await r.json();const imgs=d.images||[];grid.innerHTML=imgs.length?imgs.map((x,i)=>{const u=typeof x==="string"?x:x.url||x;return `<div class="image-card"><a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${esc(q)}" loading="lazy"></a></div>`}).join(""):"<p>No images were returned for this search.</p>"}catch(err){grid.innerHTML=`<p>${esc(err.message)}</p>`}});
+function formatAIText(text = "") {
+  let html = escapeHTML(text);
+
+  html = html.replace(
+    /^### (.*)$/gm,
+    "<h3>$1</h3>"
+  );
+
+  html = html.replace(
+    /^## (.*)$/gm,
+    "<h2>$1</h2>"
+  );
+
+  html = html.replace(
+    /^# (.*)$/gm,
+    "<h2>$1</h2>"
+  );
+
+  html = html.replace(
+    /\*\*(.*?)\*\*/g,
+    "<strong>$1</strong>"
+  );
+
+  html = html.replace(
+    /^\s*[-*]\s+(.*)$/gm,
+    "<li>$1</li>"
+  );
+
+  html = html.replace(
+    /(<li>.*<\/li>)/gs,
+    "<ul>$1</ul>"
+  );
+
+  html = html.replace(/\n/g, "<br>");
+
+  return html;
 }
 
-if(page==="lens"){
- const file=document.getElementById("lensFile"),button=document.getElementById("openCamera"),preview=document.getElementById("lensPreview"),msg=document.getElementById("lensMessage");
- button.addEventListener("click",()=>file.click());file.addEventListener("change",()=>{const f=file.files?.[0];if(!f)return;preview.src=URL.createObjectURL(f);preview.hidden=false;msg.textContent="Photo selected. Visual identification/search needs a vision API connection in the Worker."});
+function openNewTab(page) {
+  window.open(page, "_blank", "noopener,noreferrer");
 }
-if(page==="create"){
- document.getElementById("createForm").addEventListener("submit",e=>{e.preventDefault();const p=document.getElementById("imagePrompt").value.trim();if(!p)return;localStorage.setItem("volox_last_image_prompt",p);document.getElementById("createMessage").textContent="Prompt saved. Connect an image-generation provider to turn this prompt into an actual image."});
+
+/* -----------------------------
+   SEARCH
+----------------------------- */
+
+async function search() {
+
+  const query = getQuery();
+
+  if (!query) {
+    searchInput?.focus();
+    return;
+  }
+
+  saveSearch(query);
+
+  results.innerHTML = `
+    <div class="search-loading">
+      <div class="loader">🦊</div>
+      <h3>VoloX is searching...</h3>
+      <p>Finding useful information for you.</p>
+    </div>
+  `;
+
+  try {
+
+    const response = await fetch(
+      `${WORKER_URL}/api/search?q=${encodeURIComponent(query)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Search failed.");
+    }
+
+    const answer =
+      data.answer ||
+      data.ai_answer ||
+      "";
+
+    const searchResults =
+      Array.isArray(data.results)
+        ? data.results
+        : [];
+
+    let html = "";
+
+    if (answer) {
+      html += `
+        <section class="about-search">
+          <div class="about-label">ABOUT THIS SEARCH</div>
+          <div class="about-text">
+            ${formatAIText(answer)}
+          </div>
+        </section>
+      `;
+    }
+
+    html += `
+      <div class="articles-heading">
+        <h2>Articles</h2>
+        <span>${searchResults.length} results</span>
+      </div>
+    `;
+
+    if (!searchResults.length) {
+
+      html += `
+        <div class="empty-state">
+          <h3>No results found</h3>
+          <p>Try another search.</p>
+        </div>
+      `;
+
+    } else {
+
+      html += searchResults.map(item => {
+
+        const title = item.title || "Untitled";
+        const url = item.url || "#";
+        const content =
+          item.content ||
+          item.description ||
+          "Open the article to read more.";
+
+        const domain = getDomain(url);
+
+        return `
+          <article class="result-card">
+
+            <div class="result-domain">
+              ${escapeHTML(domain)}
+            </div>
+
+            <a
+              class="result-title"
+              href="${escapeHTML(url)}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ${escapeHTML(title)}
+            </a>
+
+            <p class="result-description">
+              ${escapeHTML(content)}
+            </p>
+
+            <a
+              class="read-link"
+              href="${escapeHTML(url)}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Read more ↗
+            </a>
+
+          </article>
+        `;
+
+      }).join("");
+    }
+
+    results.innerHTML = html;
+
+    window.scrollTo({
+      top: results.offsetTop - 20,
+      behavior: "smooth"
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    results.innerHTML = `
+      <div class="error-state">
+        <h3>Search couldn't load</h3>
+        <p>${escapeHTML(error.message)}</p>
+      </div>
+    `;
+  }
 }
-if(page==="history"){
- const read=k=>JSON.parse(localStorage.getItem(k)||"[]");const render=(id,a,fn)=>document.getElementById(id).innerHTML=a.length?a.map(fn).join(""):"<p class='muted'>Nothing here yet.</p>";
- render("searchHistory",read("volox_search_history"),x=>`<div class="history-item"><a href="results.html?q=${encodeURIComponent(x)}">${esc(x)}</a></div>`);
- render("imageHistory",read("volox_image_history"),x=>`<div class="history-item"><a href="images.html?q=${encodeURIComponent(x)}">${esc(x)}</a></div>`);
- render("chatHistory",read("volox_chat_history"),x=>`<div class="history-item"><b>${esc(x.question)}</b><div class="muted">${esc(x.answer).slice(0,150)}…</div></div>`);
- document.getElementById("clearHistory").addEventListener("click",()=>{["volox_search_history","volox_image_history","volox_chat_history"].forEach(k=>localStorage.removeItem(k));location.reload()});
+
+function getDomain(url) {
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Web";
+  }
 }
+
+/* -----------------------------
+   SEARCH HISTORY
+----------------------------- */
+
+function saveSearch(query) {
+
+  searchHistory = searchHistory.filter(
+    item => item.toLowerCase() !== query.toLowerCase()
+  );
+
+  searchHistory.unshift(query);
+
+  searchHistory = searchHistory.slice(0, 50);
+
+  localStorage.setItem(
+    "volox_search_history",
+    JSON.stringify(searchHistory)
+  );
+}
+
+/* -----------------------------
+   IMAGE SEARCH
+----------------------------- */
+
+function imageSearch() {
+
+  const query = getQuery();
+
+  if (!query) {
+    searchInput?.focus();
+    return;
+  }
+
+  localStorage.setItem(
+    "volox_last_image_search",
+    query
+  );
+
+  window.open(
+    `images.html?q=${encodeURIComponent(query)}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+/* -----------------------------
+   AI
+----------------------------- */
+
+function aiSearch() {
+
+  aiMessages = [];
+
+  results.innerHTML = `
+    <section class="ai-panel">
+
+      <div class="ai-top">
+        <div>
+          <h2>🤖 VoloX AI</h2>
+          <p>Ask anything and continue the conversation.</p>
+        </div>
+
+        <button id="newChatButton" type="button">
+          + New Chat
+        </button>
+      </div>
+
+      <div id="aiAnswer" class="ai-answer">
+        <div class="ai-empty">
+          <div>🤖</div>
+          <h3>How can I help?</h3>
+          <p>Ask me anything and continue the conversation.</p>
+        </div>
+      </div>
+
+      <form id="aiForm" class="ai-form">
+
+        <input
+          id="aiInput"
+          type="text"
+          placeholder="Ask VoloX AI..."
+          autocomplete="off"
+        >
+
+        <button type="submit">Send</button>
+
+      </form>
+
+    </section>
+  `;
+
+  document
+    .getElementById("aiForm")
+    ?.addEventListener("submit", event => {
+      event.preventDefault();
+      askAI();
+    });
+
+  document
+    .getElementById("newChatButton")
+    ?.addEventListener("click", () => {
+
+      aiMessages = [];
+
+      document.getElementById("aiAnswer").innerHTML = `
+        <div class="ai-empty">
+          <div>✨</div>
+          <h3>New conversation</h3>
+          <p>Ask VoloX AI anything.</p>
+        </div>
+      `;
+
+    });
+
+  document.getElementById("aiInput")?.focus();
+}
+
+async function askAI() {
+
+  const input = document.getElementById("aiInput");
+  const answerBox = document.getElementById("aiAnswer");
+
+  if (!input || !answerBox) return;
+
+  const question = input.value.trim();
+
+  if (!question) return;
+
+  aiMessages.push({
+    role: "user",
+    text: question
+  });
+
+  answerBox.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="chat-message user-message">
+        <div class="chat-label">You</div>
+        <div>${escapeHTML(question)}</div>
+      </div>
+    `
+  );
+
+  input.value = "";
+
+  answerBox.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div id="thinkingMessage" class="chat-message ai-message">
+        <div class="chat-label">VoloX AI</div>
+        <div>Thinking… 🤖</div>
+      </div>
+    `
+  );
+
+  answerBox.scrollTop = answerBox.scrollHeight;
+
+  try {
+
+    const response = await fetch(
+      `${WORKER_URL}/api/ai`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages: aiMessages
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+        data.promptFeedback?.blockReason ||
+        "AI request failed."
+      );
+    }
+
+    const text =
+      data.text ||
+      data.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("") ||
+      "Gemini returned no text.";
+
+    aiMessages.push({
+      role: "model",
+      text
+    });
+
+    document.getElementById("thinkingMessage")?.remove();
+
+    answerBox.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="chat-message ai-message">
+          <div class="chat-label">VoloX AI 🤖</div>
+          <div class="ai-text">${formatAIText(text)}</div>
+        </div>
+      `
+    );
+
+    answerBox.scrollTop = answerBox.scrollHeight;
+
+  } catch (error) {
+
+    document.getElementById("thinkingMessage")?.remove();
+
+    answerBox.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="chat-message ai-message error-chat">
+          <div class="chat-label">VoloX AI</div>
+          <div>${escapeHTML(error.message)}</div>
+        </div>
+      `
+    );
+  }
+}
+
+/* -----------------------------
+   DISCOVER
+----------------------------- */
+
+async function loadDiscover() {
+
+  const grid = document.getElementById("discoverGrid");
+  const updated = document.getElementById("discoverUpdated");
+
+  if (!grid) return;
+
+  grid.innerHTML = `
+    <div class="discover-loading">
+      🦊 Finding fresh stories…
+    </div>
+  `;
+
+  try {
+
+    const response = await fetch(
+      `${WORKER_URL}/api/discover`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Discover failed.");
+    }
+
+    const categories = [
+      "cricket",
+      "news",
+      "technology",
+      "robotics",
+      "sports",
+      "entertainment",
+      "science"
+    ];
+
+    const stories = [];
+
+    categories.forEach(category => {
+
+      const group = data[category];
+
+      if (!group) return;
+
+      const items =
+        Array.isArray(group.results)
+          ? group.results
+          : [];
+
+      const images =
+        Array.isArray(group.images)
+          ? group.images
+          : [];
+
+      items.forEach((item, index) => {
+
+        const image =
+          item.image ||
+          item.thumbnail ||
+          images[index] ||
+          images[0] ||
+          "";
+
+        stories.push({
+          category,
+          title: item.title || "Untitled story",
+          content:
+            item.content ||
+            item.description ||
+            "Read the latest details.",
+          url: item.url || "#",
+          image
+        });
+
+      });
+
+    });
+
+    if (!stories.length) {
+
+      grid.innerHTML = `
+        <div class="discover-empty">
+          <h3>No fresh stories right now</h3>
+          <p>Try refreshing in a moment.</p>
+        </div>
+      `;
+
+      return;
+    }
+
+    grid.innerHTML = stories
+      .slice(0, 20)
+      .map(story => {
+
+        const safeCategory =
+          story.category.toUpperCase();
+
+        const imageHTML = story.image
+          ? `
+            <a
+              class="discover-photo-link"
+              href="${escapeHTML(story.url)}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                class="discover-photo"
+                src="${escapeHTML(story.image)}"
+                alt=""
+                loading="lazy"
+                onerror="this.parentElement.style.display='none'"
+              >
+            </a>
+          `
+          : "";
+
+        const shortText =
+          story.content.length > 190
+            ? story.content.slice(0, 190) + "…"
+            : story.content;
+
+        return `
+          <article class="discover-story">
+
+            ${imageHTML}
+
+            <div class="discover-story-content">
+
+              <div class="discover-story-category">
+                ${escapeHTML(safeCategory)}
+              </div>
+
+              <a
+                class="discover-story-title"
+                href="${escapeHTML(story.url)}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                ${escapeHTML(story.title)}
+              </a>
+
+              <p class="discover-story-description">
+                ${escapeHTML(shortText)}
+                <a
+                  href="${escapeHTML(story.url)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  See more
+                </a>
+              </p>
+
+              <div class="discover-story-source">
+                ${escapeHTML(getDomain(story.url))}
+              </div>
+
+            </div>
+
+          </article>
+        `;
+
+      })
+      .join("");
+
+    if (updated) {
+
+      const now = new Date();
+
+      updated.textContent =
+        `Updated just now · ${now.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit"
+        })}`;
+    }
+
+  } catch (error) {
+
+    console.error(error);
+
+    grid.innerHTML = `
+      <div class="discover-empty">
+        <h3>Discover couldn't load</h3>
+        <p>${escapeHTML(error.message)}</p>
+      </div>
+    `;
+  }
+}
+
+/* -----------------------------
+   SPORTS TICKER
+----------------------------- */
+
+async function loadCricketTicker() {
+
+  const track = document.getElementById("cricketTrack");
+
+  if (!track) return;
+
+  try {
+
+    const response = await fetch(
+      `${WORKER_URL}/api/cricket`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Sports update failed.");
+    }
+
+    const items =
+      Array.isArray(data.results)
+        ? data.results
+        : [];
+
+    if (!items.length) {
+
+      track.innerHTML = `
+        <div class="cricket-placeholder">
+          🏏 No latest sports updates available.
+        </div>
+      `;
+
+      return;
+    }
+
+    const cards = items.slice(0, 10).map(item => {
+
+      const title = item.title || "Latest cricket update";
+
+      const text =
+        item.content ||
+        item.description ||
+        "Open for the latest details.";
+
+      const url = item.url || "#";
+
+      return `
+        <a
+          class="cricket-card"
+          href="${escapeHTML(url)}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+
+          <div class="cricket-card-top">
+            <span>🏏 SPORTS</span>
+            <span class="update-tag">UPDATE</span>
+          </div>
+
+          <h3>${escapeHTML(title)}</h3>
+
+          <p>
+            ${escapeHTML(
+              text.length > 85
+                ? text.slice(0, 85) + "…"
+                : text
+            )}
+          </p>
+
+        </a>
+      `;
+    }).join("");
+
+    track.innerHTML = cards + cards;
+
+    startTicker();
+
+  } catch (error) {
+
+    console.error(error);
+
+    track.innerHTML = `
+      <div class="cricket-placeholder">
+        🏏 Sports updates couldn't load.
+      </div>
+    `;
+  }
+}
+
+let tickerAnimation;
+
+function startTicker() {
+
+  const wrap = document.getElementById("cricketTicker");
+  const track = document.getElementById("cricketTrack");
+
+  if (!wrap || !track) return;
+
+  let position = 0;
+  let paused = false;
+
+  function animate() {
+
+    if (!paused) {
+
+      position -= 0.35;
+
+      const halfWidth = track.scrollWidth / 2;
+
+      if (Math.abs(position) >= halfWidth) {
+        position = 0;
+      }
+
+      track.style.transform =
+        `translateX(${position}px)`;
+    }
+
+    tickerAnimation = requestAnimationFrame(animate);
+  }
+
+  wrap.addEventListener("mouseenter", () => {
+    paused = true;
+  });
+
+  wrap.addEventListener("mouseleave", () => {
+    paused = false;
+  });
+
+  wrap.addEventListener("touchstart", () => {
+    paused = true;
+  }, { passive: true });
+
+  wrap.addEventListener("touchend", () => {
+    paused = false;
+  }, { passive: true });
+
+  animate();
+}
+
+/* -----------------------------
+   MENU
+----------------------------- */
+
+const menuBtn = document.getElementById("menuBtn");
+const closeMenu = document.getElementById("closeMenu");
+const sideMenu = document.getElementById("sideMenu");
+const menuOverlay = document.getElementById("menuOverlay");
+
+function openMenu() {
+  sideMenu?.classList.add("open");
+  menuOverlay?.classList.add("open");
+}
+
+function closeSideMenu() {
+  sideMenu?.classList.remove("open");
+  menuOverlay?.classList.remove("open");
+}
+
+menuBtn?.addEventListener("click", openMenu);
+closeMenu?.addEventListener("click", closeSideMenu);
+menuOverlay?.addEventListener("click", closeSideMenu);
+
+/* -----------------------------
+   START
+----------------------------- */
+
+loadCricketTicker();
+loadDiscover();
+
+document
+  .getElementById("refreshDiscover")
+  ?.addEventListener("click", loadDiscover);
